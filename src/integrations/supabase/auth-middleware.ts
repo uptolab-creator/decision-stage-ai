@@ -24,18 +24,20 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
     
     const request = getRequest();
 
-    if (!request?.headers) {
-      throw new Error('Unauthorized: No request headers available');
-    }
+    const authHeader = request?.headers?.get('authorization');
 
-    const authHeader = request.headers.get('authorization');
-
-    if (!authHeader) {
-      throw new Error('Unauthorized: No authorization header provided');
-    }
-
-    if (!authHeader.startsWith('Bearer ')) {
-      throw new Error('Unauthorized: Only Bearer tokens are supported');
+    // App auth is disabled (see src/routes/_authenticated/route.tsx): requests
+    // carry no Bearer token. Run in local mode with an empty Supabase stub so
+    // server functions return empty data instead of throwing.
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      const { makeEmptySupabaseStub } = await import('./local-stub');
+      return next({
+        context: {
+          supabase: makeEmptySupabaseStub(),
+          userId: 'local-user',
+          claims: { sub: 'local-user' } as Record<string, unknown>,
+        },
+      });
     }
 
     const token = authHeader.replace('Bearer ', '');

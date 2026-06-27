@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { getAdminStatus, claimAdmin } from "@/lib/admin/admin.functions";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { AdminOverview } from "@/components/admin/AdminOverview";
 import { AdminLessons } from "@/components/admin/AdminLessons";
 import { AdminCallLogs } from "@/components/admin/AdminCallLogs";
@@ -25,57 +25,79 @@ export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminPage,
 });
 
-function AdminPage() {
-  const fetchStatus = useServerFn(getAdminStatus);
-  const claim = useServerFn(claimAdmin);
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ["admin-status"],
-    queryFn: () => fetchStatus() as Promise<{ isAdmin: boolean; adminCount: number }>,
-  });
+// Simple local admin gate. App auth is disabled, so the panel is protected by a
+// fixed login instead of a Supabase session.
+const ADMIN_LOGIN = "admin";
+const ADMIN_PASSWORD = "admin01";
+const ADMIN_FLAG = "pp:admin-auth";
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen grid place-items-center text-muted-foreground">Загрузка…</div>
-    );
+function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
+  const [login, setLogin] = useState("");
+  const [password, setPassword] = useState("");
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (login.trim() === ADMIN_LOGIN && password === ADMIN_PASSWORD) {
+      try {
+        sessionStorage.setItem(ADMIN_FLAG, "1");
+      } catch {}
+      onSuccess();
+    } else {
+      toast.error("Неверный логин или пароль");
+    }
   }
 
-  if (!data?.isAdmin) {
-    return (
-      <div className="min-h-screen grid place-items-center p-6">
-        <div className="max-w-md w-full rounded-xl border bg-card p-6 text-center space-y-4">
+  return (
+    <div className="min-h-screen grid place-items-center p-6">
+      <form onSubmit={submit} className="max-w-sm w-full rounded-xl border bg-card p-6 space-y-4">
+        <div className="text-center space-y-2">
           <ShieldCheck className="size-10 mx-auto text-primary" />
-          <h1 className="text-xl font-bold">Доступ только для администраторов</h1>
-          {data?.adminCount === 0 ? (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Администратор ещё не назначен. Вы можете стать первым администратором этого
-                симулятора.
-              </p>
-              <Button
-                onClick={async () => {
-                  try {
-                    await claim();
-                    toast.success("Вы стали администратором");
-                    refetch();
-                  } catch (e: any) {
-                    toast.error(e?.message ?? "Не удалось");
-                  }
-                }}
-              >
-                Стать администратором
-              </Button>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              У вас нет прав администратора. Обратитесь к владельцу курса.
-            </p>
-          )}
-          <Link to="/course" className="block text-sm text-primary hover:underline">
-            ← Вернуться к курсу
-          </Link>
+          <h1 className="text-xl font-bold">Вход в админ-панель</h1>
+          <p className="text-sm text-muted-foreground">Введите логин и пароль администратора.</p>
         </div>
-      </div>
-    );
+        <div className="space-y-2">
+          <Label htmlFor="admin-login">Логин</Label>
+          <Input
+            id="admin-login"
+            value={login}
+            onChange={(e) => setLogin(e.target.value)}
+            autoComplete="username"
+            autoFocus
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="admin-password">Пароль</Label>
+          <Input
+            id="admin-password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+          />
+        </div>
+        <Button type="submit" className="w-full">
+          Войти
+        </Button>
+        <Link to="/course" className="block text-center text-sm text-primary hover:underline">
+          ← Вернуться к курсу
+        </Link>
+      </form>
+    </div>
+  );
+}
+
+function AdminPage() {
+  const [authed, setAuthed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return sessionStorage.getItem(ADMIN_FLAG) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  if (!authed) {
+    return <AdminLogin onSuccess={() => setAuthed(true)} />;
   }
 
   return (

@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
-import { getStudents, type StudentStat } from "@/lib/admin/admin.functions";
+import {
+  adminListStudents,
+  adminStudentDetail,
+  type StudentRow,
+  type ProgressDetail,
+} from "@/lib/students";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import {
   Table,
   TableBody,
@@ -14,77 +17,62 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, Users, Flame, Moon, CheckCircle2, AlertOctagon } from "lucide-react";
+import { Search, Users, ChevronDown, ChevronRight, Send, CheckCircle2 } from "lucide-react";
 
-const STATUS: Record<StudentStat["status"], { cls: string; label: string }> = {
-  active: { cls: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30", label: "Активен" },
-  stuck: { cls: "bg-destructive/15 text-destructive border-destructive/30", label: "Застрял" },
-  idle: { cls: "bg-muted text-muted-foreground border-border", label: "Неактивен" },
-  done: { cls: "bg-primary/15 text-primary border-primary/30", label: "Завершил" },
+const KIND_LABEL: Record<string, string> = {
+  lesson: "Урок",
+  practice: "Практика",
+  simulation: "Симуляция",
 };
 
-type SortKey = "name" | "completionPct" | "avgAttempts" | "appeals" | "lastActive";
+function fmtDate(d: string | null) {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 export function AdminStudents() {
-  const fetchStudents = useServerFn(getStudents);
   const { data, isLoading } = useQuery({
     queryKey: ["admin-students"],
-    queryFn: () => fetchStudents() as Promise<StudentStat[]>,
+    queryFn: adminListStudents,
   });
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<"all" | StudentStat["status"]>("all");
-  const [sort, setSort] = useState<SortKey>("lastActive");
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const rows = useMemo(() => {
     let r = data ?? [];
-    if (filter !== "all") r = r.filter((s) => s.status === filter);
-    if (q) r = r.filter((s) => s.name.toLowerCase().includes(q.toLowerCase()));
-    return [...r].sort((a, b) => {
-      if (sort === "name") return a.name.localeCompare(b.name);
-      if (sort === "lastActive") return +new Date(b.lastActive ?? 0) - +new Date(a.lastActive ?? 0);
-      return (b[sort] as number) - (a[sort] as number);
-    });
-  }, [data, filter, q, sort]);
+    if (q) {
+      const lq = q.toLowerCase();
+      r = r.filter((s) => s.name.toLowerCase().includes(lq) || s.telegram.toLowerCase().includes(lq));
+    }
+    return r;
+  }, [data, q]);
 
-  if (isLoading || !data) {
-    return <div className="text-muted-foreground py-12 text-center">Загрузка студентов…</div>;
+  if (isLoading) {
+    return <div className="text-muted-foreground py-12 text-center">Загрузка учеников…</div>;
   }
 
-  const counts = {
-    all: data.length,
-    active: data.filter((s) => s.status === "active").length,
-    stuck: data.filter((s) => s.status === "stuck").length,
-    idle: data.filter((s) => s.status === "idle").length,
-    done: data.filter((s) => s.status === "done").length,
-  };
-
-  const chips: { key: "all" | StudentStat["status"]; label: string; icon: any; n: number }[] = [
-    { key: "all", label: "Все", icon: Users, n: counts.all },
-    { key: "active", label: "Активные", icon: Flame, n: counts.active },
-    { key: "stuck", label: "Застрявшие", icon: AlertOctagon, n: counts.stuck },
-    { key: "idle", label: "Неактивные", icon: Moon, n: counts.idle },
-    { key: "done", label: "Завершили", icon: CheckCircle2, n: counts.done },
-  ];
+  if (!data || data.length === 0) {
+    return (
+      <Card className="p-10 text-center text-sm text-muted-foreground">
+        Пока нет учеников. Добавь их во вкладке «Доступ».
+      </Card>
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        {chips.map((c) => (
-          <button
-            key={c.key}
-            onClick={() => setFilter(c.key)}
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-              filter === c.key ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"
-            }`}
-          >
-            <c.icon className="size-3.5" /> {c.label}
-            <span className="tabular-nums opacity-70">{c.n}</span>
-          </button>
-        ))}
+    <Card className="p-0 overflow-hidden">
+      <div className="p-4 border-b flex items-center gap-3">
+        <Users className="size-4 text-muted-foreground" />
+        <span className="text-sm font-medium">Ученики и прогресс ({data.length})</span>
         <div className="relative ml-auto">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
           <Input
-            placeholder="Поиск по имени…"
+            placeholder="Поиск…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             className="h-8 w-[200px] pl-8"
@@ -92,85 +80,110 @@ export function AdminStudents() {
         </div>
       </div>
 
-      <Card className="p-0 overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <Th label="Студент" onClick={() => setSort("name")} active={sort === "name"} />
-              <TableHead className="min-w-[160px]">Прогресс курса</TableHead>
-              <Th label="Ср. попыток" right onClick={() => setSort("avgAttempts")} active={sort === "avgAttempts"} />
-              <TableHead className="text-right">Сам / помощь / провал</TableHead>
-              <Th label="Жалобы" right onClick={() => setSort("appeals")} active={sort === "appeals"} />
-              <Th label="Активность" right onClick={() => setSort("lastActive")} active={sort === "lastActive"} />
-              <TableHead className="text-right">Статус</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-10">
-                  Студентов не найдено.
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((s) => (
-                <TableRow key={s.userId}>
-                  <TableCell className="font-medium">{s.name}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Progress value={s.completionPct} className="h-2 flex-1" />
-                      <span className="text-xs tabular-nums text-muted-foreground w-16 text-right">
-                        {s.lessonsCompleted}/26 · {s.completionPct}%
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{s.avgAttempts || "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums text-xs">
-                    <span className="text-emerald-500">{s.solvedSelf}</span> /{" "}
-                    <span className="text-amber-500">{s.solvedWithHelp}</span> /{" "}
-                    <span className="text-destructive">{s.failed}</span>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {s.appeals ? <span className="text-amber-500 font-medium">{s.appeals}</span> : "—"}
-                  </TableCell>
-                  <TableCell className="text-right text-xs text-muted-foreground tabular-nums">
-                    {s.lastActive ? new Date(s.lastActive).toLocaleDateString("ru-RU") : "—"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant="outline" className={STATUS[s.status].cls}>
-                      {STATUS[s.status].label}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
-    </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-8" />
+            <TableHead>Ученик</TableHead>
+            <TableHead className="text-center">Уроки</TableHead>
+            <TableHead className="text-center">Практика</TableHead>
+            <TableHead className="text-center">Ср. балл</TableHead>
+            <TableHead>Активность</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((s) => (
+            <StudentRowView
+              key={s.id}
+              student={s}
+              open={openId === s.id}
+              onToggle={() => setOpenId(openId === s.id ? null : s.id)}
+            />
+          ))}
+        </TableBody>
+      </Table>
+    </Card>
   );
 }
 
-function Th({
-  label,
-  onClick,
-  active,
-  right,
+function StudentRowView({
+  student,
+  open,
+  onToggle,
 }: {
-  label: string;
-  onClick: () => void;
-  active: boolean;
-  right?: boolean;
+  student: StudentRow;
+  open: boolean;
+  onToggle: () => void;
 }) {
+  const { data: detail, isLoading } = useQuery({
+    queryKey: ["admin-student-detail", student.id],
+    queryFn: () => adminStudentDetail(student.id),
+    enabled: open,
+  });
+
   return (
-    <TableHead className={right ? "text-right" : ""}>
-      <button
-        onClick={onClick}
-        className={`hover:text-foreground transition-colors ${active ? "text-foreground font-semibold" : ""}`}
-      >
-        {label}
-        {active ? " ↓" : ""}
-      </button>
-    </TableHead>
+    <>
+      <TableRow className="cursor-pointer" onClick={onToggle}>
+        <TableCell>
+          {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+        </TableCell>
+        <TableCell>
+          <div className="font-medium">{student.name}</div>
+          <div className="text-xs text-muted-foreground inline-flex items-center gap-1">
+            <Send className="size-3 text-primary" /> {student.telegram}
+          </div>
+        </TableCell>
+        <TableCell className="text-center font-semibold">{student.lessons_completed}</TableCell>
+        <TableCell className="text-center font-semibold">{student.practice_completed}</TableCell>
+        <TableCell className="text-center">
+          {student.avg_score != null ? (
+            <Badge variant="secondary">{student.avg_score}</Badge>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </TableCell>
+        <TableCell className="text-xs text-muted-foreground">{fmtDate(student.last_active)}</TableCell>
+      </TableRow>
+      {open && (
+        <TableRow>
+          <TableCell colSpan={6} className="bg-secondary/30">
+            {isLoading ? (
+              <div className="py-3 text-sm text-muted-foreground">Загрузка прогресса…</div>
+            ) : !detail || detail.length === 0 ? (
+              <div className="py-3 text-sm text-muted-foreground">
+                Ученик ещё не начинал задания.
+              </div>
+            ) : (
+              <div className="py-2 space-y-1.5">
+                {detail.map((p: ProgressDetail, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 text-sm rounded-md bg-card px-3 py-1.5 border"
+                  >
+                    <Badge variant="outline" className="shrink-0">
+                      {KIND_LABEL[p.kind] ?? p.kind}
+                    </Badge>
+                    <span className="font-medium">{p.item_id}</span>
+                    {p.status === "completed" ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-600 text-xs">
+                        <CheckCircle2 className="size-3.5" /> завершено
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">шаг {p.current_step}</span>
+                    )}
+                    {p.score != null && (
+                      <span className="ml-auto text-xs font-semibold">{p.score} баллов</span>
+                    )}
+                    <span className="text-[11px] text-muted-foreground shrink-0">
+                      {fmtDate(p.updated_at)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </TableCell>
+        </TableRow>
+      )}
+    </>
   );
 }

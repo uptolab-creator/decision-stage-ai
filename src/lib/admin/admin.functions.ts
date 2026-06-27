@@ -107,7 +107,11 @@ type ProgressRow = {
 
 // ---------- admin guard ----------
 async function isAdminUser(userId: string) {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const mod = await import("@/integrations/supabase/client.server");
+  // Local mode (no service-role key, app auth disabled): treat as admin so the
+  // panel works. Real admin checks resume once Supabase is fully configured.
+  if (!mod.isSupabaseAdminConfigured()) return true;
+  const { supabaseAdmin } = mod;
   const { data, error } = await supabaseAdmin
     .from("user_roles")
     .select("id")

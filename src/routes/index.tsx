@@ -575,7 +575,11 @@ function SkillGraph() {
     if (!svg) return;
 
     const SVGNS = "http://www.w3.org/2000/svg";
-    const nodeById = Object.fromEntries(NODES_DATA.map((n) => [n.id, { ...n }]));
+    // NOTE: map to the SAME node objects (not copies) — the animation loop
+    // writes cx/cy onto NODES_DATA items, and the edges read them back via
+    // nodeById. Spreading here would leave cx/cy undefined and spam the
+    // console with "<line> attribute x1: Expected length, undefined" errors.
+    const nodeById = Object.fromEntries(NODES_DATA.map((n) => [n.id, n]));
     const neighbors: Record<string, Set<string>> = Object.fromEntries(
       NODES_DATA.map((n) => [n.id, new Set()]),
     );
@@ -611,7 +615,6 @@ function SkillGraph() {
       line.setAttribute("stroke", "rgba(91, 33, 255, 0.28)");
       line.setAttribute("stroke-width", "1.6");
       line.classList.add("edge");
-      (line as any).dataset = { a, b };
       line.dataset.a = a;
       line.dataset.b = b;
       svg.appendChild(line);
@@ -622,7 +625,6 @@ function SkillGraph() {
       const g = document.createElementNS(SVGNS, "g") as SVGGElement;
       g.classList.add("node");
       g.setAttribute("transform", `translate(${n.x}, ${n.y})`);
-      (g as any).style = { color: n.color };
       g.style.color = n.color;
       g.dataset.id = n.id;
 

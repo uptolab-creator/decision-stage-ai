@@ -10,6 +10,7 @@ import { OfficeView } from "@/components/office/OfficeView";
 
 import { getScenario, type Scenario } from "@/lib/scenarios";
 import { reactToDecision, generateReport } from "@/lib/simulation.functions";
+import { saveProgress as saveStudentProgress } from "@/lib/students";
 import { useI18n } from "@/lib/i18n";
 import {
   ArrowLeft,
@@ -257,6 +258,7 @@ function Running({ scenario, onComplete }: { scenario: Scenario; onComplete: () 
           JSON.stringify({ report, scenarioId: scenario.id, at: Date.now() }),
         );
       } catch {}
+      void saveStudentProgress("simulation", scenario.id, scenario.totalSteps, "completed", null);
       navigate({ to: "/simulations/$id/results", params: { id: scenario.id } });
       onComplete();
     } catch (e) {
@@ -361,6 +363,7 @@ function Running({ scenario, onComplete }: { scenario: Scenario; onComplete: () 
             JSON.stringify({ report, scenarioId: scenario.id, at: Date.now() }),
           );
         } catch {}
+        void saveStudentProgress("simulation", scenario.id, scenario.totalSteps, "completed", null);
         navigate({ to: "/simulations/$id/results", params: { id: scenario.id } });
         onComplete();
         return;

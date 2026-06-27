@@ -1,12 +1,11 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import {
-  getAllowedStudents,
-  addAllowedStudent,
-  removeAllowedStudent,
-  type AllowedStudent,
-} from "@/lib/admin/admin.functions";
+  adminListStudents,
+  adminAddStudent,
+  adminRemoveStudent,
+  type StudentRow,
+} from "@/lib/students";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,39 +18,36 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, Plus, Trash2, Mail, ShieldCheck, Loader2 } from "lucide-react";
+import { Search, Plus, Trash2, UserPlus, ShieldCheck, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 
 export function AdminAccess() {
   const queryClient = useQueryClient();
-  const fetchStudents = useServerFn(getAllowedStudents);
-  const addStudent = useServerFn(addAllowedStudent);
-  const removeStudent = useServerFn(removeAllowedStudent);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-allowed-students"],
-    queryFn: () => fetchStudents() as Promise<AllowedStudent[]>,
+    queryKey: ["admin-students"],
+    queryFn: adminListStudents,
   });
 
-  const [email, setEmail] = useState("");
-  const [displayName, setDisplayName] = useState("");
+  const [name, setName] = useState("");
+  const [telegram, setTelegram] = useState("");
 
   const addMutation = useMutation({
-    mutationFn: () => addStudent({ data: { email, displayName } }),
+    mutationFn: () => adminAddStudent(name, telegram),
     onSuccess: () => {
       toast.success("Студент добавлен");
-      setEmail("");
-      setDisplayName("");
-      queryClient.invalidateQueries({ queryKey: ["admin-allowed-students"] });
+      setName("");
+      setTelegram("");
+      queryClient.invalidateQueries({ queryKey: ["admin-students"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "Ошибка"),
   });
 
   const removeMutation = useMutation({
-    mutationFn: (id: string) => removeStudent({ data: { id } }),
+    mutationFn: (id: string) => adminRemoveStudent(id),
     onSuccess: () => {
-      toast.success("Доступ отозван");
-      queryClient.invalidateQueries({ queryKey: ["admin-allowed-students"] });
+      toast.success("Студент удалён");
+      queryClient.invalidateQueries({ queryKey: ["admin-students"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "Ошибка"),
   });
@@ -59,18 +55,17 @@ export function AdminAccess() {
   const [q, setQ] = useState("");
 
   const rows = useMemo(() => {
-    if (!data) return [];
+    if (!data) return [] as StudentRow[];
     if (!q) return data;
+    const lq = q.toLowerCase();
     return data.filter(
-      (s) =>
-        s.email.toLowerCase().includes(q.toLowerCase()) ||
-        (s.display_name ?? "").toLowerCase().includes(q.toLowerCase()),
+      (s) => s.name.toLowerCase().includes(lq) || s.telegram.toLowerCase().includes(lq),
     );
   }, [data, q]);
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
+    if (!name.trim() || !telegram.trim()) return;
     addMutation.mutate();
   };
 
@@ -78,45 +73,48 @@ export function AdminAccess() {
     <div className="space-y-6">
       <Card className="p-5">
         <h3 className="text-sm font-semibold flex items-center gap-2 mb-4">
-          <Plus className="size-4" /> Добавить студента
+          <Plus className="size-4" /> Добавить ученика в группу
         </h3>
         <form onSubmit={handleAdd} className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1 flex-1 min-w-[200px]">
-            <Label htmlFor="access-email">Email студента</Label>
+          <div className="space-y-1 flex-1 min-w-[160px]">
+            <Label htmlFor="access-name">Имя</Label>
             <Input
-              id="access-email"
-              type="email"
+              id="access-name"
               required
-              placeholder="student@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Иван Иванов"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
             />
           </div>
           <div className="space-y-1 flex-1 min-w-[160px]">
-            <Label htmlFor="access-name">Имя (необязательно)</Label>
+            <Label htmlFor="access-tg">Telegram-ник</Label>
             <Input
-              id="access-name"
-              placeholder="Иван Иванов"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
+              id="access-tg"
+              required
+              placeholder="@username"
+              value={telegram}
+              onChange={(e) => setTelegram(e.target.value)}
             />
           </div>
           <Button type="submit" disabled={addMutation.isPending}>
             {addMutation.isPending ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
-              <Mail className="size-4" />
+              <UserPlus className="size-4" />
             )}
-            Предоставить доступ
+            Добавить
           </Button>
         </form>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Войти в практику смогут только добавленные сюда ученики — по имени и Telegram-нику.
+        </p>
       </Card>
 
       <Card className="p-0 overflow-hidden">
         <div className="p-4 border-b flex items-center gap-3">
           <ShieldCheck className="size-4 text-muted-foreground" />
           <span className="text-sm font-medium">
-            Студенты с доступом{data ? ` (${data.length})` : ""}
+            Ученики группы{data ? ` (${data.length})` : ""}
           </span>
           <div className="relative ml-auto">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
@@ -133,14 +131,14 @@ export function AdminAccess() {
           <div className="text-center py-10 text-muted-foreground text-sm">Загрузка…</div>
         ) : rows.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground text-sm">
-            {q ? "Ничего не найдено." : "Пока нет студентов с доступом."}
+            {q ? "Ничего не найдено." : "Пока никого нет. Добавь первого ученика выше."}
           </div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Email</TableHead>
                 <TableHead>Имя</TableHead>
+                <TableHead>Telegram</TableHead>
                 <TableHead>Добавлен</TableHead>
                 <TableHead className="text-right">Действия</TableHead>
               </TableRow>
@@ -148,8 +146,10 @@ export function AdminAccess() {
             <TableBody>
               {rows.map((s) => (
                 <TableRow key={s.id}>
-                  <TableCell className="font-medium">{s.email}</TableCell>
-                  <TableCell className="text-muted-foreground">{s.display_name || "—"}</TableCell>
+                  <TableCell className="font-medium">{s.name}</TableCell>
+                  <TableCell className="text-muted-foreground inline-flex items-center gap-1.5">
+                    <Send className="size-3.5 text-primary" /> {s.telegram}
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {new Date(s.created_at).toLocaleDateString("ru-RU")}
                   </TableCell>

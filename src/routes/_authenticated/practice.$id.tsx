@@ -14,6 +14,8 @@ import type {
 } from "@/lib/missions/types";
 import { TONE_LABELS } from "@/lib/missions/types";
 import { upsertProgress } from "@/lib/course/progress.functions";
+import { StudentGate } from "@/components/StudentGate";
+import { saveProgress as saveStudentProgress } from "@/lib/students";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -83,12 +85,14 @@ function MissionRunner() {
   }
 
   return (
-    <MissionStage
-      key={mission.id}
-      mission={mission}
-      navigate={navigate}
-      saveProgress={saveProgress}
-    />
+    <StudentGate kind="practice" itemId={mission.id}>
+      <MissionStage
+        key={mission.id}
+        mission={mission}
+        navigate={navigate}
+        saveProgress={saveProgress}
+      />
+    </StudentGate>
   );
 }
 
@@ -125,7 +129,14 @@ function MissionStage({
     void saveProgress({
       data: { lessonId: mission.id, currentStep: state.stepIndex, status },
     }).catch(() => {});
-  }, [state.status, state.stepIndex, mission.id, saveProgress]);
+    void saveStudentProgress(
+      "practice",
+      mission.id,
+      state.stepIndex,
+      state.status === "won" ? "completed" : "in_progress",
+      state.status === "won" || state.status === "lost" ? state.metric : null,
+    );
+  }, [state.status, state.stepIndex, state.metric, mission.id, saveProgress]);
 
   const activeObject = state.status === "playing" ? currentStep?.object : null;
   const playing = state.status === "playing";

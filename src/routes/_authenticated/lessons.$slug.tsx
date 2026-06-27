@@ -7,6 +7,8 @@ import { upsertProgress, recordAttempt } from "@/lib/course/progress.functions";
 import { CallPanel } from "@/components/course/CallPanel";
 import { LessonRadar, type LessonSkillKey } from "@/components/course/LessonRadar";
 import { AppealButton } from "@/components/course/AppealButton";
+import { StudentGate } from "@/components/StudentGate";
+import { saveProgress as saveStudentProgress } from "@/lib/students";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -68,6 +70,15 @@ type AttemptStatus = "solved_self" | "solved_with_help" | "failed";
 
 function LessonRunner() {
   const { slug } = Route.useParams();
+  return (
+    <StudentGate kind="lesson" itemId={slug}>
+      <LessonRunnerInner />
+    </StudentGate>
+  );
+}
+
+function LessonRunnerInner() {
+  const { slug } = Route.useParams();
   const navigate = useNavigate();
   const lesson = getLesson(slug);
   const saveProgress = useServerFn(upsertProgress);
@@ -85,10 +96,20 @@ function LessonRunner() {
 
   useEffect(() => {
     if (!lesson) return;
+    const completed = step >= totalSteps - 1;
     void saveProgress({
-      data: { lessonId: lesson.id, currentStep: step, status: step >= totalSteps - 1 ? "completed" : "in_progress" },
+      data: { lessonId: lesson.id, currentStep: step, status: completed ? "completed" : "in_progress" },
     }).catch(() => {});
-  }, [step, lesson, saveProgress, totalSteps]);
+    const vals = Object.values(scores);
+    const avg = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+    void saveStudentProgress(
+      "lesson",
+      lesson.id,
+      step,
+      completed ? "completed" : "in_progress",
+      completed ? avg : null,
+    );
+  }, [step, lesson, saveProgress, totalSteps, scores]);
 
   if (!lesson) {
     return (
