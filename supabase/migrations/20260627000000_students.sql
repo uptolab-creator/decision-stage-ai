@@ -41,10 +41,24 @@ alter table public.student_events enable row level security;
 create or replace function public.norm_tg(p text)
 returns text language sql immutable as $$ select lower(regexp_replace(trim(coalesce(p,'')), '^@', '')) $$;
 
+-- Admin secret lives in a config table (not in source code). Set it once with:
+--   insert into public.app_config(key, value) values ('admin_secret', '<your-secret>')
+--     on conflict (key) do update set value = excluded.value;
+create table if not exists public.app_config (
+  key text primary key,
+  value text not null
+);
+alter table public.app_config enable row level security;
+-- no anon policies: readable only by SECURITY DEFINER functions below.
+
 create or replace function public.admin_check(p_secret text)
-returns void language plpgsql as $$
+returns void language plpgsql security definer set search_path=public as $$
+declare v_secret text;
 begin
-  if p_secret is distinct from 'admin01' then raise exception 'forbidden'; end if;
+  select value into v_secret from public.app_config where key = 'admin_secret';
+  if p_secret is null or v_secret is null or p_secret <> v_secret then
+    raise exception 'forbidden';
+  end if;
 end; $$;
 
 create or replace function public.student_login(p_name text, p_telegram text)

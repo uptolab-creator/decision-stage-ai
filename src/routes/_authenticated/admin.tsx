@@ -26,9 +26,10 @@ export const Route = createFileRoute("/_authenticated/admin")({
 });
 
 // Simple local admin gate. App auth is disabled, so the panel is protected by a
-// fixed login instead of a Supabase session.
-const ADMIN_LOGIN = "admin";
-const ADMIN_PASSWORD = "admin01";
+// fixed login instead of a Supabase session. Credentials come from env vars
+// (set in .env / deployment) so they aren't hardcoded in the repo.
+const ADMIN_LOGIN = import.meta.env.VITE_ADMIN_LOGIN ?? "admin";
+const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD ?? "";
 const ADMIN_FLAG = "pp:admin-auth";
 
 function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
@@ -37,6 +38,10 @@ function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!ADMIN_PASSWORD) {
+      toast.error("Пароль администратора не настроен (VITE_ADMIN_PASSWORD).");
+      return;
+    }
     if (login.trim() === ADMIN_LOGIN && password === ADMIN_PASSWORD) {
       try {
         sessionStorage.setItem(ADMIN_FLAG, "1");

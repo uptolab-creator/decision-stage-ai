@@ -13,9 +13,10 @@ export type ProgressKind = "lesson" | "practice" | "simulation";
 export type ProgressStatus = "in_progress" | "completed";
 
 const STORAGE_KEY = "pp:student";
-// Shared admin secret (matches the admin panel password). Note: client-side,
-// so this is access control for a small private course, not strong security.
-const ADMIN_SECRET = "admin01";
+// Shared admin secret (matches the DB app_config 'admin_secret'). Read from env
+// so it isn't hardcoded in the repo. Client-side, so this is access control for
+// a small private course, not strong security.
+const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET ?? "";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const rpc = (fn: string, args: Record<string, unknown>) => (supabase as any).rpc(fn, args);
