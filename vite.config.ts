@@ -7,11 +7,12 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 // The Nitro deploy plugin only runs inside Lovable's cloud context; outside it
-// we must force-enable it. Use the Vercel preset on Vercel, Cloudflare Pages
-// preset everywhere else (the default Lovable deploy target).
+// we must force-enable it. Use the node preset so the build produces a plain
+// Node.js HTTP server at .output/server/index.mjs — works on Railway, Render,
+// Fly.io, or any VPS. (Vercel preset is still used when VERCEL=1.)
 const nitroConfig = process.env.VERCEL
   ? ({ nitro: { preset: "vercel" } } as const)
-  : ({ nitro: { preset: "cloudflare-pages" } } as const);
+  : ({ nitro: { preset: "node" } } as const);
 
 export default defineConfig({
   ...nitroConfig,
